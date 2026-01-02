@@ -1,8 +1,10 @@
 
 __author__ = 'katharine'
 
+import errno
 import os
 import os.path
+import signal
 from progressbar import ProgressBar, Bar, FileTransferSpeed, Timer, Percentage
 
 from libpebble2.communication.transports.websocket import WebsocketTransport, MessageTargetPhone
@@ -13,6 +15,7 @@ from libpebble2.services.install import AppInstaller
 from .base import PebbleCommand
 from ..util.logs import PebbleLogPrinter
 from ..exceptions import ToolError
+from ..sdk import emulator as emu_module
 
 
 class InstallCommand(PebbleCommand):
@@ -20,6 +23,8 @@ class InstallCommand(PebbleCommand):
     command = 'install'
 
     def __call__(self, args):
+        if args.fresh:
+            self._kill_emulators()
         super(InstallCommand, self).__call__(args)
         try:
             ToolAppInstaller(self.pebble, args.pbw).install()
@@ -32,11 +37,37 @@ class InstallCommand(PebbleCommand):
         if args.logs:
             PebbleLogPrinter(self.pebble).wait()
 
+    def _kill_emulators(self):
+        """Kill all running emulators to ensure a fresh state."""
+        info = emu_module.get_all_emulator_info()
+        killed_any = False
+        for platform in list(info.values()):
+            for version in list(platform.values()):
+                killed_any |= self._kill_if_running(version['qemu']['pid'])
+                killed_any |= self._kill_if_running(version['pypkjs']['pid'])
+                if 'websockify' in version:
+                    killed_any |= self._kill_if_running(version['websockify']['pid'])
+        if killed_any:
+            print("Killed emulator for fresh install.")
+
+    @classmethod
+    def _kill_if_running(cls, pid):
+        """Kill a process if it's running. Returns True if killed."""
+        try:
+            os.kill(pid, signal.SIGTERM)
+            return True
+        except OSError as e:
+            if e.errno == errno.ESRCH:
+                return False
+            raise
+
     @classmethod
     def add_parser(cls, parser):
         parser = super(InstallCommand, cls).add_parser(parser)
         parser.add_argument('pbw', help="Path to app to install.", nargs='?', default=None)
         parser.add_argument('--logs', action="store_true", help="Enable logs")
+        parser.add_argument('--fresh', action="store_true",
+                            help="Kill and restart the emulator before installing to clear cached state")
         return parser
 
 
