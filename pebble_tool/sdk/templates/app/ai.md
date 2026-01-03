@@ -28,8 +28,17 @@ pebble clean
 # Install the app on specific emulator
 pebble install --emulator basalt
 
+# Install with --fresh to kill running emulators first (clears cached app state)
+pebble install --emulator basalt --fresh
+
 # Screenshot the running emulator
 pebble screenshot --scale 6 --no-open screenshot.png
+
+# Check emulator and app status
+pebble emu status
+
+# Check status with verbose output (shows more details on errors)
+pebble emu status --verbose
 ```
 
 If you need more information on the `pebble` command or a sub-command, append `--help`.
